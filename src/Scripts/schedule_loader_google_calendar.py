@@ -2,13 +2,15 @@ from __future__ import print_function
 import sys
 import os.path
 import datetime as dt
-from typing import Optional
+from typing import Optional, Dict, Tuple
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+from src.Classes.work_shift import WorkShift
 from src.config.LOADER_CREDENTIALS_DIRECTORY import CRED_DIR, TOKEN_DIR
 from src.config.CREDENTIALS import ARI_USER, JETS_USER, ARI_PASS
 from src.config.CALENDAR_IDS import ARI_SCHEDULE_ID, JESS_SCHEDULE_ID
@@ -66,34 +68,64 @@ def load_gcalendar_api_credentials() -> Optional[dict]:
     return creds
 
 
+def get_start_end_for_event(event: dict) -> Tuple[Optional[dt.datetime], Optional[dt.datetime]]:
+    start_dict, end_dict = event.get('start'), event.get('end')
+    start_dt, end_dt = None, None
+    if start_dict is not None:
+        _start_dt = start_dict.get('dateTime')
+        if _start_dt is not None:
+            start_dt = dt.datetime.fromisoformat(_start_dt)
+
+    if end_dict is not None:
+        _end_dt = end_dict.get('dateTime')
+        if _end_dt is not None:
+            end_dt = dt.datetime.fromisoformat(_end_dt)
+
+    return start_dt, end_dt
+
+
+def update_schedule(service: build, calendar_id: str, up_to_date: Dict[str, WorkShift]):
+    # Call the Calendar API, 'Z' indicates UTC time
+    now = dt.datetime.fromisoformat(dt.datetime.utcnow().date().isoformat()).isoformat() + 'Z'
+    events_result = service.events().list(calendarId=calendar_id, timeMin=now,
+                                          maxResults=30, singleEvents=True,
+                                          orderBy='startTime').execute()
+    events = events_result.get('items', [])
+
+    if not events:
+        print('No upcoming events found.')
+        return
+
+    for event in events:
+        event_name = event.get('summary')
+        if event_name != 'Lush Shift':
+            continue
+
+        start_dt, end_dt = get_start_end_for_event(event)
+        if start_dt is not None:
+            start_date_string = start_dt.strftime('%Y%m%d')
+            possibly_updated_shift = up_to_date.get(start_date_string)
+            if possibly_updated_shift is not None and end_dt is not None:
+                print(f"Found shift for user on date {start_date_string}, comparing:")
+                if possibly_updated_shift.shift_local_start_time != start_dt or possibly_updated_shift.shift_local_end_time != end_dt:
+                    print('Deleting event from calendar and replacing, dates do not match')
+                    service.events().delete(calendar_id=calendar_id, eventId=event.get('id')).execute()
+                else:
+                    print('Up to date, deleting from dictionary')
+                    del up_to_date[start_date_string]
+    return
+
+
 def load_user_schedule(user_in: str, user_pass: str, calendar_id: str):
     creds = load_gcalendar_api_credentials()
     if creds is not None:
         try:
             service = build('calendar', 'v3', credentials=creds)
-
-            # Call the Calendar API, 'Z' indicates UTC time
-            now = dt.datetime.fromisoformat(dt.datetime.utcnow().date().isoformat()).isoformat() + 'Z'
-            events_result = service.events().list(calendarId=calendar_id, timeMin=now,
-                                                  maxResults=30, singleEvents=True,
-                                                  orderBy='startTime').execute()
-            events = events_result.get('items', [])
-
-            if not events:
-                print('No upcoming events found.')
-
-            # Delete events from schedule dict that are already found in the calendar:
+            # Get the up to date schedule from website
             schedule_dict = get_schedule_dict_for_user(user_in, user_pass)
-            for event in events:
-                start_dict = event.get('start')
-                if start_dict is not None:
-                    _start_dt = start_dict.get('dateTime')
-                    if _start_dt is not None:
-                        start_dt = dt.datetime.fromisoformat(_start_dt)
-                        start_date_string = start_dt.strftime('%Y%m%d')
-                        if schedule_dict.get(start_date_string) is not None:
-                            print(f"Found shift for user {user_in} on date {start_date_string}, skipping")
-                            del schedule_dict[start_date_string]
+            # Delete events in the calendar that have updated start and end times, or delete entries
+            # that are not updated in schedule dict:
+            update_schedule(service, calendar_id, schedule_dict)
 
             # Add the remaining shifts to the calendar:
             for _, work_shift_obj in schedule_dict.items():
