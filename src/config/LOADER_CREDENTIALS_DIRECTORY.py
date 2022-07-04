@@ -1,1 +1,2 @@
 CRED_DIR = "C:\\Users\\mikep\\PycharmProjects\\work-schedule-loader\\src\\Client Files\\credentials.json"
+TOKEN_DIR = "C:\\Users\\mikep\\PycharmProjects\\work-schedule-loader\\src\\Client Files\\token.json"
