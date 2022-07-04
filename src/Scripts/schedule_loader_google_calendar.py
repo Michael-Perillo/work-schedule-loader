@@ -17,7 +17,7 @@ from src.config.CALENDAR_IDS import ARI_SCHEDULE_ID, JESS_SCHEDULE_ID
 from src.Scripts.schedule_getter_storeforce import get_schedule_dict_for_user
 
 # See https://developers.google.com/workspace/guides/create-credentials#desktop-app for how to generate credentials
-# See https://developers.google.com/calendar/api/quickstart/python for more information, can add token to remove auth
+# Based on https://developers.google.com/calendar/api/quickstart/python, see for more info, can remove token to make more secure
 # See https://developers.google.com/calendar/api/guides/auth for scopes
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']

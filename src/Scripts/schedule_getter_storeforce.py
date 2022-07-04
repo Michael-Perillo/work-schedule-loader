@@ -18,7 +18,7 @@ def parse_workday_shift_string(workday_shift_string: str) -> Tuple[dt.time, dt.t
     return start_time, end_time
 
 
-def send_data(input_box: webdriver, _in: str, timeout: int):
+def send_data(input_box: webdriver, _in: str, timeout: int) -> bool:
     count = 0
     while input_box.get_attribute('value') != _in:
         if count > timeout:
