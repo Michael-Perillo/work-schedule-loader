@@ -13,8 +13,8 @@ from googleapiclient.errors import HttpError
 
 from src.Classes.work_shift import WorkShift
 from src.config.LOADER_CREDENTIALS_DIRECTORY import CRED_DIR, TOKEN_DIR
-from src.config.CREDENTIALS import ARI_USER, JETS_USER, TAYL_USER, ARI_PASS
-from src.config.CALENDAR_IDS import ARI_SCHEDULE_ID, JESS_SCHEDULE_ID, TAYLOR_SCHEDULE_ID
+from src.config.Credential_Dir.CREDENTIALS import ARI_USER, JETS_USER, TAYL_USER, ARI_PASS
+from src.config.Credential_Dir.CALENDAR_IDS import ARI_SCHEDULE_ID, JESS_SCHEDULE_ID, TAYLOR_SCHEDULE_ID
 from src.Scripts.schedule_getter_storeforce import get_schedule_dict_for_user
 
 # See https://developers.google.com/workspace/guides/create-credentials#desktop-app for how to generate credentials
