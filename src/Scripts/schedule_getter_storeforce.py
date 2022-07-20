@@ -52,16 +52,16 @@ def get_schedule_dict_for_user(user_in: str, user_pass: str) -> Dict[str, WorkSh
     schedule_btn.click()
 
     schedule_calendar = driver.find_element(By.ID, 'scheduleContent')
-    week_tbody = schedule_calendar.find_element(By.CSS_SELECTOR, '[data-bind="foreach: ScheduleWeeks"]')
+    week_tbody = WebDriverWait(schedule_calendar, timeout=5).until(lambda d: d.find_element(By.CSS_SELECTOR, '[data-bind="foreach: ScheduleWeeks"]'))
     month = dt.datetime.strptime(schedule_calendar.find_element(By.CSS_SELECTOR, '[data-bind="text: MonthName"]').text,
                                  "%B").month
     today = dt.datetime.today().date()
     assert today.month == month
-    weeks = week_tbody.find_elements(By.TAG_NAME, 'tr')
+    weeks = WebDriverWait(week_tbody, timeout=5).until(lambda d: d.find_elements(By.TAG_NAME, 'tr'))
 
     sched_dict = {}
     for week in weeks:
-        days = week.find_elements(By.TAG_NAME, 'td')
+        days = WebDriverWait(week, timeout=5).until(lambda d: d.find_elements(By.TAG_NAME, 'td'))
         for index, day in enumerate(days):
             try:
                 workday_str = day.text
