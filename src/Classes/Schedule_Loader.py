@@ -1,5 +1,4 @@
 import datetime as dt
-import os
 import time
 import logging
 from typing import Tuple, Dict
@@ -21,6 +20,7 @@ class ScheduleLoader(object):
         self.timeout = timeout
         self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager(path=CACHE_DIR).install()))
         self.schedule_dict = self.load_schedule()
+        self.driver.quit()
 
     def wait_to_find_element(self, driver: webdriver) -> webdriver:
         wait = WebDriverWait(driver, timeout=self.timeout)
