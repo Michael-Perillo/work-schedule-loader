@@ -2,6 +2,7 @@ from __future__ import print_function
 import os.path
 import datetime as dt
 import logging
+import random
 from typing import Optional, Dict, Tuple
 
 from google.auth.transport.requests import Request
@@ -14,14 +15,16 @@ from googleapiclient.errors import HttpError
 from src.Classes.work_shift import WorkShift
 from src.Classes.Schedule_Loader import ScheduleLoader
 from src.config.LOADER_CREDENTIALS_DIRECTORY import CRED_DIR, TOKEN_DIR
+from src.config.Motivational_Quotes_Config import QUOTES
 
 
 class LushGoogleCalendarWriter(object):
 
-    def __init__(self, user_in: str, user_pass: str, calendar_id: str):
+    def __init__(self, user_in: str, user_pass: str, calendar_id: str, debug: bool = False):
         self._SCOPES = ['https://www.googleapis.com/auth/calendar']
         self._creds = self.load_gcalendar_api_credentials()
         self._calendar_id = calendar_id
+        self.debug = debug
         if self._creds is not None:
             try:
                 self.service = build('calendar', 'v3', credentials=self._creds)
@@ -52,10 +55,11 @@ class LushGoogleCalendarWriter(object):
     @staticmethod
     def create_event(start_dt: dt.datetime, end_dt: dt.datetime) -> dict:
         # See https://developers.google.com/calendar/api/v3/reference/events for fields
+        desc = random.choice(QUOTES)
         event = {
             'summary': 'Lush Shift',
             'location': '1961 Chain Bridge Rd Unit G7U, McLean, VA 22102',
-            'description': 'Workin hard for the money! Go baby!',
+            'description': desc,
             'start': {
                 'dateTime': start_dt.isoformat(),
                 'timeZone': 'America/New_York',
@@ -135,13 +139,16 @@ class LushGoogleCalendarWriter(object):
 
     def load_user_schedule(self, user_in: str, user_pass: str, calendar_id: str):
         # Get the up to date schedule from website
-        schedule_dict = ScheduleLoader(user_in, user_pass, 20).schedule_dict
+        schedule_dict = ScheduleLoader(user_in, user_pass, 40).schedule_dict
         # Delete events in the calendar that have updated start and end times, or delete entries
         # that are not updated in schedule dict:
-        self.update_schedule(up_to_date=schedule_dict)
-        # Add the remaining shifts to the calendar:
-        for _, work_shift_obj in schedule_dict.items():
-            new_event_body = self.create_event(work_shift_obj.shift_local_start_time,
-                                               work_shift_obj.shift_local_end_time)
-            new_event = self.service.events().insert(calendarId=calendar_id, body=new_event_body).execute()
-            print('Event created: %s' % (new_event.get('htmlLink')))
+        if not self.debug:
+            self.update_schedule(up_to_date=schedule_dict)
+            # Add the remaining shifts to the calendar:
+            for _, work_shift_obj in schedule_dict.items():
+                new_event_body = self.create_event(work_shift_obj.shift_local_start_time,
+                                                   work_shift_obj.shift_local_end_time)
+                new_event = self.service.events().insert(calendarId=calendar_id, body=new_event_body).execute()
+                print('Event created: %s' % (new_event.get('htmlLink')))
+        else:
+            pass
