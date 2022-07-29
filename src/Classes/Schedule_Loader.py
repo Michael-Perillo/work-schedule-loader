@@ -1,16 +1,21 @@
 import datetime as dt
 import time
 import logging
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 from src.config.DRIVER_CACHE_DIRECTORY import CACHE_DIR
 from src.config.LUSH_STORE_FORCE_URL import URL
 from src.Classes.work_shift import WorkShift
 from selenium import webdriver
+from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
+from bs4 import BeautifulSoup
+import copy
+import re
 
 
 class ScheduleLoader(object):
@@ -18,57 +23,52 @@ class ScheduleLoader(object):
         self.user_in = user_in
         self.user_pass = user_pass
         self.timeout = timeout
+        self.date = dt.date.today()
         self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager(path=CACHE_DIR).install()))
         self.schedule_dict = self.load_schedule()
         self.driver.quit()
 
-    def wait_to_find_element(self, driver: webdriver) -> webdriver:
-        wait = WebDriverWait(driver, timeout=self.timeout)
-        return wait.until(EC.visibility_of(driver))
+    def wait_to_find(self, condition: EC) -> WebDriver:
+        wait = WebDriverWait(self.driver, timeout=self.timeout)
+        return wait.until(condition)
 
     def login(self, user_box: webdriver, pass_box: webdriver, login_btn: webdriver) -> bool:
-        user_input_check = EC.text_to_be_present_in_element_value(user_box, self.user_in)
-        pass_input_check = EC.text_to_be_present_in_element_value(pass_box, self.user_pass)
-        check_inputs = EC.all_of(user_input_check, pass_input_check)
-        timeout_delta = dt.timedelta(seconds=self.timeout)
-        start_time = time.clock()
-        run_time = dt.timedelta(seconds=0)
-        while (not check_inputs or (timeout_delta > run_time)):
+        start_time = time.perf_counter()
+        run_time = 0
+        while self.timeout > run_time:
             user_box.send_keys(self.user_in)
+            time.sleep(.25)
             pass_box.send_keys(self.user_pass)
-            user_input_check = EC.text_to_be_present_in_element_value(user_box, self.user_in)
-            pass_input_check = EC.text_to_be_present_in_element_value(pass_box, self.user_pass)
-            check_inputs = EC.all_of(user_input_check, pass_input_check)
-            run_time = time.clock() - start_time
-        if check_inputs:
-            login_btn.click()
-            return True
-        else:
-            return False
+            time.sleep(.25)
+            try:
+                login_btn.click()
+                WebDriverWait(self.driver, 10).until(lambda d: d.find_element(By.ID, 'buttons').find_element(By.CSS_SELECTOR, '[data-bind="click: ScheduleClicked"]'))
+                return True
+            except TimeoutException:
+                run_time = time.perf_counter() - start_time
+                self.driver.find_element(By.ID, 'btnMessageBoxClose').click()
+                user_box.clear()
+                pass_box.clear()
+                continue
+        return False
 
-    def parse_weeks(self, weeks: webdriver):
-        sched_dict = {}
-        today = dt.datetime.today()
-        for week in weeks:
-            # TODO: Refactor this to work with self.wait_until_element_found, this returns a list
-            days = WebDriverWait(week, timeout=5).until(lambda d: d.find_elements(By.TAG_NAME, 'td'))
-            for index, day in enumerate(days):
-                try:
-                    workday_str = day.text
-                    if len(workday_str) <= 1:
-                        continue
-                    workday_info = workday_str.split('\n')
-                    workday_numeric_day = int(workday_info[0])
-                    if workday_numeric_day < today.day:
-                        continue
-                    workday_shift_string = workday_info[-1]
-                    workday_shift_start, workday_shift_end = self.parse_workday_shift_string(workday_shift_string)
-                    workday_date = dt.datetime(today.year, today.month, workday_numeric_day).date()
-                    work_shift = WorkShift(workday_date, workday_shift_start, workday_shift_end)
-                    sched_dict[workday_date.strftime('%Y%m%d')] = work_shift
-                except Exception:
+    def parse_scheduled_days(self, schedule: List[List[BeautifulSoup]]) -> Dict[str, WorkShift]:
+        out_dict = {}
+        for index, month_sched_days in enumerate(schedule):
+            if not index:
+                month = self.date.month
+            else:
+                month = self.date.month + 1
+            for day in month_sched_days:
+                shift_day_numeric = int(day.find_next('label', attrs={'data-bind': re.compile("Day$")}).text)
+                if shift_day_numeric <= self.date.day and month == self.date.month:
                     continue
-        return sched_dict
+                else:
+                    shift_hours_raw = day.find_next('label', attrs={'data-bind': re.compile("Shift$")}).text
+                    shift_start, shift_end = self.parse_workday_shift_string(shift_hours_raw)
+                    shift_date = dt.date(self.date.year, month, shift_day_numeric)
+                    out_dict[shift_date.strftime('%Y%m%d')] = WorkShift(shift_date, shift_start, shift_end)
+        return out_dict
 
     @staticmethod
     def parse_workday_shift_string(workday_shift_string: str) -> Tuple[dt.time, dt.time]:
@@ -81,20 +81,44 @@ class ScheduleLoader(object):
     def load_schedule(self) -> Dict[str, WorkShift]:
         self.driver.get(URL)
 
-        inputs_locator = self.wait_to_find_element(self.driver.find_element(By.ID, 'login-inputs-container'))
-        login_btn = self.wait_to_find_element(self.driver.find_element(By.TAG_NAME, 'Button'))
-        username_box = self.wait_to_find_element(inputs_locator.find_element(By.CSS_SELECTOR, '[type="text"]'))
-        password_box = self.wait_to_find_element(inputs_locator.find_element(By.CSS_SELECTOR, '[type="password"]'))
+        # inputs_locator = (By.ID, 'login-inputs-container')
+        login_btn_locator = (By.TAG_NAME, 'Button')
+        user_box_locator = (By.CSS_SELECTOR, '[type="text"]')
+        pass_box_locator = (By.CSS_SELECTOR, '[type="password"]')
+        self.wait_to_find(EC.presence_of_element_located(login_btn_locator))
+        self.wait_to_find(EC.presence_of_element_located(user_box_locator))
+        self.wait_to_find(EC.presence_of_element_located(pass_box_locator))
+
+
+        inputs_location = self.driver.find_element(By.ID, 'login-inputs-container')
+        login_btn = self.driver.find_element(By.TAG_NAME, 'Button')
+        username_box = inputs_location.find_element(By.CSS_SELECTOR, '[type="text"]')
+        password_box = inputs_location.find_element(By.CSS_SELECTOR, '[type="password"]')
 
         logged_in = self.login(username_box, password_box, login_btn)
 
         if logged_in:
-            schedule_btn = self.wait_to_find_element(self.driver.find_element(By.CSS_SELECTOR,
-                                                                              '[data-bind="click: ScheduleClicked"]'))
-            schedule_btn.click()
-            self.wait_to_find_element(self.driver.find_element(By.CSS_SELECTOR, '[data-bind="foreach: ScheduleWeeks"]'))
-            weeks = self.wait_to_find_element(self.driver.find_element(By.TAG_NAME, 'tr'))
-            return self.parse_weeks(weeks)
+            # Wait for the schedule button to load, then click it
+            self.driver.find_element(By.ID, 'buttons').find_element(By.CSS_SELECTOR, '[data-bind="click: ScheduleClicked"]').click()
+
+            # Refactor with beautiful soup:
+            # Wait condition for calendar:
+            cal_wait_cond = EC.presence_of_element_located((By.CSS_SELECTOR, '[data-bind="foreach: ScheduleWeeks"]'))
+            self.wait_to_find(cal_wait_cond)
+            time.sleep(2)
+            page_src = copy.deepcopy(self.driver.page_source)
+            soup_current_month = BeautifulSoup(page_src, 'html.parser')
+            # Check next month:
+            self.driver.find_element(By.CSS_SELECTOR, '[data-bind="click: NextMonthClicked"]').click()
+            self.wait_to_find(cal_wait_cond)
+            time.sleep(2)
+            next_month_page_src = copy.deepcopy(self.driver.page_source)
+            soup_next_month = BeautifulSoup(next_month_page_src, 'html.parser')
+            # Get the days scheduled for this and next month:
+            scheduled_days_current_month = soup_current_month.find_all('div', class_="calendar-day scheduled")
+            scheduled_days_next_month = soup_next_month.find_all('div', class_="calendar-day scheduled")
+            schedule = [scheduled_days_current_month, scheduled_days_next_month]
+            return self.parse_scheduled_days(schedule)
         else:
             logging.error(f"Unable to log in for user {self.user_in}, please retry with a higher timeout or check logic")
 
