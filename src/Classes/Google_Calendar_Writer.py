@@ -142,6 +142,7 @@ class LushGoogleCalendarWriter(object):
         schedule_dict = ScheduleLoader(user_in, user_pass, 40).schedule_dict
         # Delete events in the calendar that have updated start and end times, or delete entries
         # that are not updated in schedule dict:
+        # This line is a test that I added in doom emacs to push to github using magit
         if not self.debug:
             self.update_schedule(up_to_date=schedule_dict)
             # Add the remaining shifts to the calendar:
