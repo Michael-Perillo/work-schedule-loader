@@ -12,7 +12,7 @@ USERS_DICT = {
 
 def main():
     for user, calendar in USERS_DICT.items():
-        LushGoogleCalendarWriter(user, PASSWD, calendar)
+        LushGoogleCalendarWriter(user, PASSWD, calendar, True)
 
 
 if __name__ == '__main__':
