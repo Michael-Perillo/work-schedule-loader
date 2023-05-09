@@ -55,10 +55,15 @@ class ScheduleLoader(object):
     def parse_scheduled_days(self, schedule: List[List[BeautifulSoup]]) -> Dict[str, WorkShift]:
         out_dict = {}
         for index, month_sched_days in enumerate(schedule):
+            year = self.date.year
             if not index:
                 month = self.date.month
             else:
-                month = self.date.month + 1
+                if self.date.month == 12:
+                    month = 1
+                    year += 1
+                else:
+                    month = self.date.month + 1
             for day in month_sched_days:
                 shift_day_numeric = int(day.find_next('label', attrs={'data-bind': re.compile("Day$")}).text)
                 if shift_day_numeric <= self.date.day and month == self.date.month:
@@ -66,7 +71,7 @@ class ScheduleLoader(object):
                 else:
                     shift_hours_raw = day.find_next('label', attrs={'data-bind': re.compile("Shift$")}).text
                     shift_start, shift_end = self.parse_workday_shift_string(shift_hours_raw)
-                    shift_date = dt.date(self.date.year, month, shift_day_numeric)
+                    shift_date = dt.date(year, month, shift_day_numeric)
                     out_dict[shift_date.strftime('%Y%m%d')] = WorkShift(shift_date, shift_start, shift_end)
         return out_dict
 
@@ -82,7 +87,7 @@ class ScheduleLoader(object):
         self.driver.get(URL)
 
         # inputs_locator = (By.ID, 'login-inputs-container')
-        login_btn_locator = (By.TAG_NAME, 'Button')
+        login_btn_locator = (By.CLASS_NAME, 'login-inputs__button')
         user_box_locator = (By.CSS_SELECTOR, '[type="text"]')
         pass_box_locator = (By.CSS_SELECTOR, '[type="password"]')
         self.wait_to_find(EC.presence_of_element_located(login_btn_locator))
@@ -90,10 +95,10 @@ class ScheduleLoader(object):
         self.wait_to_find(EC.presence_of_element_located(pass_box_locator))
 
 
-        inputs_location = self.driver.find_element(By.ID, 'login-inputs-container')
-        login_btn = self.driver.find_element(By.TAG_NAME, 'Button')
-        username_box = inputs_location.find_element(By.CSS_SELECTOR, '[type="text"]')
-        password_box = inputs_location.find_element(By.CSS_SELECTOR, '[type="password"]')
+        # inputs_location = self.driver.find_element(By.ID, 'login-inputs-container')
+        login_btn = self.driver.find_element(By.CLASS_NAME, 'login-inputs__button')
+        username_box = self.driver.find_element(By.CSS_SELECTOR, '[type="text"]')
+        password_box = self.driver.find_element(By.CSS_SELECTOR, '[type="password"]')
 
         logged_in = self.login(username_box, password_box, login_btn)
 

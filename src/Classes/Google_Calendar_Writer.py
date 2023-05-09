@@ -149,7 +149,11 @@ class LushGoogleCalendarWriter(object):
             for _, work_shift_obj in schedule_dict.items():
                 new_event_body = self.create_event(work_shift_obj.shift_local_start_time,
                                                    work_shift_obj.shift_local_end_time)
-                new_event = self.service.events().insert(calendarId=calendar_id, body=new_event_body).execute()
-                print('Event created: %s' % (new_event.get('htmlLink')))
+                try:
+                    new_event = self.service.events().insert(calendarId=calendar_id, body=new_event_body).execute()
+                    print('Event created: %s' % (new_event.get('htmlLink')))
+                except Exception:
+                    print('Error creating event')
+                    continue
         else:
             pass
